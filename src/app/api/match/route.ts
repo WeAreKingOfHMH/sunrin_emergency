@@ -138,7 +138,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // 2-2. 구매 시간대 (최대 50점)
+      // 2-2. 구매 시간대 (최대 30점)
       if (timeSeconds !== 'unknown') {
         const orderDate = new Date(order.created_at);
         // 서버가 UTC 환경(Vercel)이므로 KST(+9시간)로 명시적 변환하여 시/분을 추출합니다.
@@ -150,12 +150,10 @@ export async function POST(req: Request) {
         // 자정 경계를 넘어가는 경우 방어 (e.g. 23:55:00 vs 00:05:00)
         if (diff > 43200) diff = 86400 - diff;
 
-        // 시간에 따른 세밀한 점수 부여 (가까울수록 더 높은 점수)
-        if (diff <= 60) score += 50;       // 1분 이내 (가장 높음)
-        else if (diff <= 180) score += 40; // 3분 이내
-        else if (diff <= 300) score += 30; // 5분 이내
-        else if (diff <= 600) score += 20; // 10분 이내
-        else if (diff <= 1800) score += 10; // 30분 이내
+        // 시간에 따른 세밀한 점수 부여를 없애고, 매우 널널하게 우선순위만 가리도록 변경
+        if (diff <= 1800) score += 30;       // 30분 이내 (가장 높음)
+        else if (diff <= 7200) score += 20;  // 2시간 이내
+        else score += 10;                    // 그 외 (오차가 커도 감점 없음)
       }
 
       // 2-3. 이름/학번 기반 보너스 점수 (최대 30점)
@@ -177,8 +175,8 @@ export async function POST(req: Request) {
       matchCandidates.push({ order, score });
     }
 
-    // 60점 미만인 후보는 전부 제거 (너무 동떨어진 기록은 매칭 제외)
-    const validCandidates = matchCandidates.filter(c => c.score >= 60);
+    // 50점 미만인 후보는 전부 제거 (너무 동떨어진 기록은 매칭 제외)
+    const validCandidates = matchCandidates.filter(c => c.score >= 50);
 
     if (validCandidates.length === 0) {
       return NextResponse.json({ error: '입력한 정보와 일치하는 주문을 찾을 수 없습니다. 결제 시간 등 더 정확한 정보를 입력하시거나 전화/DM으로 문의해 주세요.' }, { status: 400 });
@@ -186,31 +184,8 @@ export async function POST(req: Request) {
 
     validCandidates.sort((a, b) => b.score - a.score);
 
+    // 가장 점수가 높은 1등 주문을 무조건 반환 (동점자가 있어도 무조건 1등 반환)
     const bestMatch = validCandidates[0];
-    const secondBest = validCandidates[1];
-
-    // 조회 성공 조건
-    const isUniqueInDb = validCandidates.length === 1;
-
-    // 1. 후보가 2개 이상이고, 1위와 2위의 점수 차이가 20점 미만이면 특정 불가 (동시간대 유사 주문)
-    if (secondBest && (bestMatch.score - secondBest.score < 20)) {
-      return NextResponse.json({ error: '입력한 정보만으로 주문을 정확히 확인하기 어렵습니다. 동시간대 유사한 주문이 있습니다. 공식 Instagram DM으로 문의해 주세요.' }, { status: 400 });
-    }
-
-    const totalItemCount = (receivedItems?.reduce((a: number, c: any) => a + c.quantity, 0) || 0) + (backorderItems?.reduce((a: number, c: any) => a + c.quantity, 0) || 0);
-    
-    // 2. 단일 상품 결제의 경우, 데이터베이스에 동일한 조건의 주문이 여러 개 있다면 시간대 정보가 매우 정확해야 함
-    if (totalItemCount === 1 && !isUniqueInDb) {
-      if (timeSeconds === 'unknown' || bestMatch.score < 50) {
-         return NextResponse.json({ error: '입력한 정보와 일치하는 다수의 주문이 존재합니다. 본인의 주문을 특정하기 위해 구매 시각을 더 정확히(1분 이내 오차) 입력해주세요.' }, { status: 400 });
-      }
-    }
-
-    // 3. DB에 유일한 주문(isUniqueInDb)이라면, 시간대를 틀리거나 모르더라도 바로 통과시켜줌!
-    //    유일하지 않다면 최소한의 보조 점수(30점 이상)는 요구 (너무 엉뚱한 주문 방지)
-    if (!isUniqueInDb && bestMatch.score < 30) {
-      return NextResponse.json({ error: '입력한 정보만으로 주문을 정확히 확인하기 어렵습니다. 기억나지 않는 항목이 있다면 공식 Instagram DM으로 문의해 주세요.' }, { status: 400 });
-    }
 
     // 성공! order 정보를 반환
     const { id, items, total: ordTotal, payment_method, status, created_at, daily_order_number, discount_amount, customer_name, customer_student_id } = bestMatch.order;
