@@ -138,6 +138,23 @@ export default function Wizard({ products, lanes }: { products: any[], lanes: an
       }
 
       store.setMatchedOrder(data.order);
+
+      // 매칭 성공 시 정보 신청 로그(emergency_claims)에 기록
+      try {
+        await fetch('/api/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: data.order.id,
+            dailyOrderNumber: data.order.daily_order_number || data.order.dailyOrderNumber || 0,
+            customerName: store.customerName || data.order.customer_name || '미입력',
+            customerStudentId: store.studentId || data.order.customer_student_id || '미입력'
+          })
+        });
+      } catch (logErr) {
+        console.error('Failed to log claim:', logErr);
+      }
+
       setPage([10, 1]);
       store.setStep(10);
 

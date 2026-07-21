@@ -37,19 +37,6 @@ export async function POST(req: Request) {
       
     if (error) throw error;
     
-    // 관리자 대시보드 반영을 위해 메인 결제 테이블도 즉시 업데이트
-    const { error: updateError } = await supabaseAdmin
-      .from('pay_request_log')
-      .update({
-        customer_name: customerName,
-        customer_student_id: customerStudentId
-      })
-      .eq('id', orderId);
-
-    if (updateError) {
-      console.error('Failed to update pay_request_log:', updateError);
-    }
-    
     return NextResponse.json({ success: true });
     
   } catch (error) {
