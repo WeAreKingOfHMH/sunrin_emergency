@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🐱 선린냥이 후발주 조회 시스템 (Sunrin Emergency)
 
-## Getting Started
+> **7월 20일 진행된 선린냥이 × HMH 키오스크 행사** 중 발생한 후발주 주문자 정보 누락 문제를 해결하기 위해 긴급 구축된 주문 복구 시스템입니다.
 
-First, run the development server:
+## 📌 프로젝트 소개
+키오스크 운영 중 예기치 못한 시스템 오류로 인해 일부 후발주(나중에 배송/수령하기로 한 상품) 주문의 **구매자 정보(이름, 학번)가 누락**되는 사고가 발생했습니다.
+결제 내역(`pay_request_log`) 자체는 정상적으로 보존되어 있었으므로, 구매자가 자신이 결제한 내역을 기억나는 대로 기입하면 **자체 매칭 알고리즘을 통해 본인의 주문을 특정하고 정보를 복구**할 수 있도록 설계된 서비스입니다.
 
+## ✨ 주요 기능
+### 1. 단계별 정보 입력 UI (Wizard)
+사용자가 복잡한 폼에 지치지 않도록 직관적이고 미려한 UI/UX(다크/라이트 모드, 부드러운 애니메이션 적용)를 통해 9단계에 걸쳐 정보를 수집합니다.
+- 본인 정보 (이름, 학번)
+- 결제 수단 (현금, 계좌이체, 각종 페이 등)
+- 구매한 전체 상품 (현장 수령 + 후발주 수령)
+- 총 결제 금액
+- 할인/쿠폰 적용 여부
+- 정확한 결제 시각 (시간대 프리셋 + 초 단위 정밀 입력 지원)
+
+### 2. 스마트 매칭 알고리즘 (`/api/match`)
+사용자가 입력한 불완전한 단서들을 조합해 데이터베이스 내의 방대한 결제 로그 중 본인의 주문을 찾아냅니다.
+- **필수 조건 검증:** 결제 수단, 결제 총액, 전체 상품 목록이 정확히 일치해야 합니다. (단, 선택 옵션명 오타 등은 무시하도록 완화됨)
+- **시간 근접도 스코어링:** 사용자가 입력한 구매 시각과 실제 DB에 기록된 결제 시각의 오차(초 단위)를 계산해 점수를 차등 부여합니다. (1분 이내 50점 ~ 30분 이내 10점)
+- **정보 기반 보너스 점수:** 누락된 정보지만 포스기에 오타 등으로 일부 정보가 남아있을 경우를 대비하여, 입력한 '이름'과 '학번'이 로그와 일치하면 강력한 보너스 점수(최대 30점)를 부여합니다.
+- **유일성 검증:** DB 내에 조건과 일치하는 주문이 단 1건뿐이라면 다소 부정확한 정보(시간 오차 등)라도 너그럽게 매칭을 승인합니다. 동일 상품 다수 주문일 경우에만 엄격한 시간/점수 커트라인을 요구합니다.
+
+### 3. 클레임 접수 및 영수증 확인
+- **Claim Update:** 일치하는 주문을 찾으면 새로운 구매자 정보(이름, 학번)를 `emergency_claims` (또는 지정된 DB)에 업데이트 요청을 보냅니다.
+- **전자 영수증:** 매칭 완료 후 디지털 영수증을 발급하여, 사용자가 정상적으로 주문이 복구되었음을 확인하고 원본 영수증 링크로 이동할 수 있게 합니다.
+
+## 🛠️ 기술 스택
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS, Framer Motion (애니메이션)
+- **State Management:** Zustand (로컬스토리지 연동 `useStore`)
+- **Backend & DB:** Supabase (PostgreSQL)
+- **Deployment:** Vercel
+
+## 🚀 로컬 실행 방법
+
+1. 의존성 패키지 설치
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. 환경 변수 설정
+`.env.local` 파일을 생성하고 아래 Supabase 키를 입력합니다.
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. 개발 서버 실행
+```bash
+npm run dev
+```
+이후 `http://localhost:3000` 에서 확인하실 수 있습니다.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🤝 기여 및 유지보수
+본 시스템은 행사 당일 및 직후의 위기 상황을 수습하기 위해 신속하게 제작되었습니다.
+동일한 구조의 오프라인 팝업 행사나 유사한 결제 정보 복구 프로세스가 필요할 경우 재사용할 수 있습니다.
