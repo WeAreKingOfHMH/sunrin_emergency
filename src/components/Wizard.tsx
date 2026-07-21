@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore, SelectedItem } from '@/store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, Check, Plus, Minus, AlertCircle, Info, X, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, Plus, Minus, AlertCircle, Info, X, AlertTriangle, Phone } from 'lucide-react';
 import Receipt from './Receipt';
 import UpdateInfoForm from './UpdateInfoForm';
 import ProductSelectionModal from './ProductSelectionModal';
@@ -165,18 +165,33 @@ export default function Wizard({ products, lanes }: { products: any[], lanes: an
               </p>
             </div>
 
-            <a href="https://www.instagram.com/sunrin_cat/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between w-full p-4 mb-8 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-colors group">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center">
-                  <InstagramIcon size={20} />
+            <div className="flex flex-col gap-3 mb-8">
+              <a href="https://www.instagram.com/sunrin_cat/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-colors group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center">
+                    <InstagramIcon size={20} />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="font-bold text-slate-900 text-sm">Instagram DM 문의하기</span>
+                    <span className="text-xs text-slate-500 font-medium">@sunrin_cat</span>
+                  </div>
                 </div>
-                <div className="flex flex-col text-left">
-                  <span className="font-bold text-slate-900 text-sm">Instagram DM 문의하기</span>
-                  <span className="text-xs text-slate-500 font-medium">@sunrin_cat</span>
+                <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors" size={20} />
+              </a>
+
+              <a href="tel:010-6234-2874" className="flex items-center justify-between w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-colors group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center">
+                    <Phone size={20} />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="font-bold text-slate-900 text-sm">전화로 문의하기</span>
+                    <span className="text-xs text-slate-500 font-medium">010-6234-2874</span>
+                  </div>
                 </div>
-              </div>
-              <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors" size={20} />
-            </a>
+                <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors" size={20} />
+              </a>
+            </div>
             <div className="mt-auto">
               <button onClick={nextStep} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition active:scale-95 shadow-md">
                 주문 확인 시작하기

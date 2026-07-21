@@ -2,6 +2,21 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { OrderItem } from '@/types';
 
+const PAYMENT_METHOD_ALIASES: Record<string, readonly string[]> = {
+  cash: ['cash'],
+  account_transfer: ['account', 'account_transfer'],
+  card: ['card'],
+  kakaopay: ['kakaopay', 'kakao_pay'],
+  naverpay: ['naverpay', 'naver_pay'],
+  tosspay: ['tosspay', 'toss_pay'],
+  applepay: ['applepay', 'apple_pay'],
+  samsungpay: ['samsungpay', 'samsung_pay'],
+};
+
+function paymentMethodAliases(method: string): readonly string[] {
+  return PAYMENT_METHOD_ALIASES[method] ?? [method];
+}
+
 // In-memory rate limiting map
 // Key: IP, Value: { count: number, resetAt: number, blockedUntil: number }
 const rateLimitMap = new Map<string, { count: number, resetAt: number, blockedUntil: number }>();
@@ -43,7 +58,7 @@ export async function POST(req: Request) {
     const { data: orders, error } = await supabaseAdmin
       .from('pay_request_log')
       .select('id, items, total, payment_method, status, created_at, daily_order_number, discount_amount, customer_name, customer_student_id, customer_type')
-      .eq('payment_method', paymentMethod);
+      .in('payment_method', [...paymentMethodAliases(paymentMethod)]);
 
     if (error || !orders) {
       console.error('Supabase fetch error:', error);
@@ -57,22 +72,10 @@ export async function POST(req: Request) {
       // 근데 문제 요구사항은 '누락된 3건'을 찾는 것.
       
       let score = 0;
-      let isRequiredMatched = true;
-
       const orderItems: OrderItem[] = order.items || [];
       const orderTotal = order.total;
 
-      // 1-1. 금액 필수 검증
-      if (orderTotal !== Number(total)) {
-        isRequiredMatched = false;
-        continue;
-      }
-
-      // 1-2. 실수령/후발주 분리
-      const orderReceivedItems = orderItems.filter(i => !i.backorder);
-      const orderBackorderItems = orderItems.filter(i => i.backorder);
-
-      // 1-3. 상품 일치 여부 헬퍼 (옵션 무시, 상품 종류와 총 수량만 일치하면 됨)
+      // 1. 아이템 일치도 점수 (후발주/실수령 구분 없이 통합 비교)
       const normalizeCart = (items: any[]) => {
         const map = new Map<string, number>();
         for (const item of items) {
@@ -83,24 +86,49 @@ export async function POST(req: Request) {
         return map;
       };
 
-      const isItemsExactMatch = (targetItems: any[], sourceItems: any[]) => {
-        const targetMap = normalizeCart(targetItems);
-        const sourceMap = normalizeCart(sourceItems);
-        
-        if (targetMap.size !== sourceMap.size) return false;
-        
-        for (const [key, qty] of targetMap.entries()) {
-          if (sourceMap.get(key) !== qty) return false;
+      const allOrderItems = orderItems;
+      const allInputItems = [...(receivedItems || []), ...(backorderItems || [])];
+
+      const inputMap = normalizeCart(allInputItems);
+      const orderMap = normalizeCart(allOrderItems);
+      
+      let isPerfectItemMatch = true;
+      if (inputMap.size !== orderMap.size) isPerfectItemMatch = false;
+
+      for (const [key, qty] of inputMap.entries()) {
+        const orderQty = orderMap.get(key) || 0;
+        if (orderQty === qty) {
+          score += 40; // 정확히 수량까지 맞춤
+        } else if (orderQty > 0) {
+          score += 20; // 수량은 틀리지만 해당 상품을 사긴 삼
+          isPerfectItemMatch = false;
+        } else {
+          score -= 10; // 아예 사지 않은 상품을 입력함
+          isPerfectItemMatch = false;
         }
-        return true;
-      };
+      }
+      for (const key of orderMap.keys()) {
+         if (!inputMap.has(key)) {
+            // 사용자가 빼먹은 상품
+            isPerfectItemMatch = false;
+         }
+      }
 
-      if (!isItemsExactMatch(receivedItems || [], orderReceivedItems)) isRequiredMatched = false;
-      if (!isItemsExactMatch(backorderItems || [], orderBackorderItems)) isRequiredMatched = false;
+      if (isPerfectItemMatch) {
+        score += 50; // 상품 목록 완전 일치 보너스
+      }
 
-      if (!isRequiredMatched) continue;
+      // 2. 결제 금액 점수
+      if (orderTotal === Number(total)) {
+        score += 50;
+      } else {
+        const diff = Math.abs(orderTotal - Number(total));
+        if (diff <= 1000) {
+          score += 20; // 약간의 오차 허용
+        }
+      }
 
-      // --- 필수 조건 모두 일치. 보조 점수 계산 ---
+      // --- 3. 보조 점수 계산 ---
       
       // 2-1. 할인/쿠폰 (30점)
       if (discount !== 'unknown') {
@@ -149,17 +177,20 @@ export async function POST(req: Request) {
       matchCandidates.push({ order, score });
     }
 
-    if (matchCandidates.length === 0) {
-      return NextResponse.json({ error: '입력한 정보만으로 주문을 정확히 확인하기 어렵습니다. 기억나지 않는 항목이 있다면 공식 Instagram DM으로 문의해 주세요.' }, { status: 400 });
+    // 60점 미만인 후보는 전부 제거 (너무 동떨어진 기록은 매칭 제외)
+    const validCandidates = matchCandidates.filter(c => c.score >= 60);
+
+    if (validCandidates.length === 0) {
+      return NextResponse.json({ error: '입력한 정보와 일치하는 주문을 찾을 수 없습니다. 결제 시간 등 더 정확한 정보를 입력하시거나 전화/DM으로 문의해 주세요.' }, { status: 400 });
     }
 
-    matchCandidates.sort((a, b) => b.score - a.score);
+    validCandidates.sort((a, b) => b.score - a.score);
 
-    const bestMatch = matchCandidates[0];
-    const secondBest = matchCandidates[1];
+    const bestMatch = validCandidates[0];
+    const secondBest = validCandidates[1];
 
     // 조회 성공 조건
-    const isUniqueInDb = matchCandidates.length === 1;
+    const isUniqueInDb = validCandidates.length === 1;
 
     // 1. 후보가 2개 이상이고, 1위와 2위의 점수 차이가 20점 미만이면 특정 불가 (동시간대 유사 주문)
     if (secondBest && (bestMatch.score - secondBest.score < 20)) {

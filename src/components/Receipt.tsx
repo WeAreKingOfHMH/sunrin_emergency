@@ -107,13 +107,13 @@ export default function Receipt({ onUpdateClick }: { onUpdateClick?: () => void 
           <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-200">
             <span>이름:</span>
             <span className="font-bold text-slate-900">
-              {order.customerName === undefined ? '새로고침 필요' : (order.customerName || '기록 없음')}
+              {order.customer_name === undefined ? '새로고침 필요' : (order.customer_name || '기록 없음')}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span>학번:</span>
             <span className="font-bold text-slate-900">
-              {order.customerStudentId === undefined ? '새로고침 필요' : (order.customerStudentId || '기록 없음')}
+              {order.customer_student_id === undefined ? '새로고침 필요' : (order.customer_student_id || '기록 없음')}
             </span>
           </div>
         </div>
